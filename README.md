@@ -1,2 +1,2 @@
 # kozu
-A simple music player inspired by osu!
+_base framework_
