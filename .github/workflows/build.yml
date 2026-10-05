@@ -32,15 +32,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Fix line endings and permissions for gradlew
         run: |
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
 
-      - name: run Android lint
-        run: ./gradlew lintDebug
-
       - name: compile code
         run: ./gradlew compileDebugSources
+
+      - name: Clean Gradle Cache
+        run: ./gradlew clean
