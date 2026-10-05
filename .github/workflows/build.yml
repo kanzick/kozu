@@ -35,7 +35,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: run Android lint
-        run: bash gradlew lintDebug
+        run: ./gradlew lintDebug
 
       - name: compile code
-        run: bash gradlew compileDebugSources
+        run: ./gradlew compileDebugSources
