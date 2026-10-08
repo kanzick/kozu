@@ -1,2 +1,1 @@
-# kozu
-_base framework_
+**Listening your favorite osu! songs anytime anywhere ~**
