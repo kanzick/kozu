@@ -1,1 +1,1 @@
-**Listening your favorite osu! songs anytime anywhere ~**
+LISTENING YOUR FAVORITE OSU! SONG ANYTIME ANYWHERE ~
