@@ -1,7 +1,11 @@
-
 package vn.kozu
 
 import android.os.Bundle
+import android.app.WallpaperManager
+import android.os.Build
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
@@ -50,6 +54,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -68,12 +73,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            MaterialTheme {
-                KozuApp()
-            }
+            KozuApp()
         }
     }
 }
+
 
 private enum class KozuTab(
     val title: String,
@@ -112,6 +116,52 @@ private val demoBeatmaps = listOf(
     )
 )
 
+private fun getWallpaperSeed(context: android.content.Context): Color {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        return try {
+            val wallpaperManager = WallpaperManager.getInstance(context)
+            val wallpaperColors =
+                wallpaperManager.getWallpaperColors(WallpaperManager.FLAG_SYSTEM)
+
+            val wallpaperColor = wallpaperColors?.primaryColor
+
+            if (wallpaperColor != null) {
+                Color(wallpaperColor.toArgb())
+            } else {
+                Color(0xFFE7EF91)
+            }
+        } catch (_: Exception) {
+            Color(0xFFE7EF91)
+        }
+    }
+
+    return Color(0xFFE7EF91)
+}
+
+private fun makeKozuColorScheme(
+    seed: Color,
+    dark: Boolean
+): androidx.compose.material3.ColorScheme {
+    return if (dark) {
+        darkColorScheme(
+            primary = seed,
+            secondary = Color(0xFFC6B7FF),
+            tertiary = Color(0xFFFF9FCB),
+            background = Color(0xFF151019),
+            surface = Color(0xFF211A28),
+            surfaceVariant = Color(0xFF302638)
+        )
+    } else {
+        lightColorScheme(
+            primary = seed,
+            secondary = Color(0xFF747A36),
+            tertiary = Color(0xFFB85D83),
+            background = Color(0xFFFFF9EC),
+            surface = Color(0xFFFFFDF7),
+            surfaceVariant = Color(0xFFF0E9D9)
+        )
+    }
+}
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun KozuApp() {
@@ -136,6 +186,18 @@ private fun KozuApp() {
 
     val context = LocalContext.current
 
+    val wallpaperSeed = remember(context) {
+        getWallpaperSeed(context)
+    }
+
+    val isDarkTheme = selectedTab == KozuTab.SEARCH || selectedTab == KozuTab.SETTINGS
+
+    val kozuColors = remember(wallpaperSeed, isDarkTheme) {
+        makeKozuColorScheme(
+            seed = wallpaperSeed,
+            dark = isDarkTheme
+        )
+    }
     val playerManager = remember(context) {
         MusicPlayerManager(context.applicationContext)
     }
@@ -170,106 +232,108 @@ private fun KozuApp() {
         initial = emptySet()
     )
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Kozu",
-                        fontWeight = FontWeight.Bold
+    MaterialTheme(colorScheme = kozuColors) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "Kozu",
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background
                     )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
                 )
-            )
-        },
-        bottomBar = {
-            Column {
-                selectedBeatmap?.let { beatmap ->
-                    MiniPlayer(
-                        beatmap = beatmap,
-                        isPlaying = isPlaying,
-                        isFavorite = beatmap.id in favorites,
-                        currentPosition = currentPosition,
-                        duration = duration,
-                        onSeek = { position ->
-                            playerManager.player.seekTo(position)
-                            currentPosition = position
-                        },
-                        onPlayPause = {
-                            if (playerManager.player.isPlaying) {
-                                playerManager.pause()
-                                isPlaying = false
-                            } else {
-                                if (playerManager.player.currentMediaItem == null) {
-                                    playerManager.playLocalResource(R.raw.test)
+            },
+            bottomBar = {
+                Column {
+                    selectedBeatmap?.let { beatmap ->
+                        MiniPlayer(
+                            beatmap = beatmap,
+                            isPlaying = isPlaying,
+                            isFavorite = beatmap.id in favorites,
+                            currentPosition = currentPosition,
+                            duration = duration,
+                            onSeek = { position ->
+                                playerManager.player.seekTo(position)
+                                currentPosition = position
+                            },
+                            onPlayPause = {
+                                if (playerManager.player.isPlaying) {
+                                    playerManager.pause()
+                                    isPlaying = false
                                 } else {
-                                    playerManager.resume()
+                                    if (playerManager.player.currentMediaItem == null) {
+                                        playerManager.playLocalResource(R.raw.test)
+                                    } else {
+                                        playerManager.resume()
+                                    }
+                                    isPlaying = playerManager.player.isPlaying
                                 }
-                                isPlaying = playerManager.player.isPlaying
+                            },
+                            onFavorite = {
+                                scope.launch {
+                                    favoritesStore.toggleFavorite(beatmap.id)
+                                }
+                            },
+                            onOpen = {
+                                selectedTab = KozuTab.LIBRARY
                             }
+                        )
+                    }
+
+                    FloatingBottomBar(
+                        selectedTab = selectedTab,
+                        onTabSelected = { selectedTab = it }
+                    )
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.background
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                when (selectedTab) {
+                    KozuTab.HOME -> HomeScreen(
+                        favorites = favorites,
+                        onBeatmapSelected = { beatmap ->
+                            selectedBeatmap = beatmap
+                            isPlaying = false
                         },
-                        onFavorite = {
+                        onFavorite = { beatmap ->
                             scope.launch {
                                 favoritesStore.toggleFavorite(beatmap.id)
                             }
-                        },
-                        onOpen = {
-                            selectedTab = KozuTab.LIBRARY
                         }
                     )
+
+                    KozuTab.SEARCH -> SearchScreen()
+
+                    KozuTab.LIBRARY -> LibraryScreen(
+                        favorites = demoBeatmaps.filter {
+                            it.id in favorites
+                        },
+                        selectedBeatmap = selectedBeatmap,
+                        onBeatmapSelected = { beatmap ->
+                            selectedBeatmap = beatmap
+                            isPlaying = false
+                        },
+                        onFavorite = { beatmap ->
+                            scope.launch {
+                                favoritesStore.toggleFavorite(beatmap.id)
+                            }
+                        }
+                    )
+
+                    KozuTab.SETTINGS -> PlaceholderScreen(
+                        title = "Settings",
+                        description = "Customize your listening experience."
+                    )
                 }
-
-                FloatingBottomBar(
-                    selectedTab = selectedTab,
-                    onTabSelected = { selectedTab = it }
-                )
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            when (selectedTab) {
-                KozuTab.HOME -> HomeScreen(
-                    favorites = favorites,
-                    onBeatmapSelected = { beatmap ->
-                        selectedBeatmap = beatmap
-                        isPlaying = false
-                    },
-                    onFavorite = { beatmap ->
-                        scope.launch {
-                            favoritesStore.toggleFavorite(beatmap.id)
-                        }
-                    }
-                )
-
-                KozuTab.SEARCH -> SearchScreen()
-
-                KozuTab.LIBRARY -> LibraryScreen(
-                    favorites = demoBeatmaps.filter {
-                        it.id in favorites
-                    },
-                    selectedBeatmap = selectedBeatmap,
-                    onBeatmapSelected = { beatmap ->
-                        selectedBeatmap = beatmap
-                        isPlaying = false
-                    },
-                    onFavorite = { beatmap ->
-                        scope.launch {
-                            favoritesStore.toggleFavorite(beatmap.id)
-                        }
-                    }
-                )
-
-                KozuTab.SETTINGS -> PlaceholderScreen(
-                    title = "Settings",
-                    description = "Customize your listening experience."
-                )
             }
         }
     }
