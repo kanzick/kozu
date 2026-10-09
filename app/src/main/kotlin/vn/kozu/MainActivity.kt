@@ -54,7 +54,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -62,7 +62,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.DisposableEffect
+import androidx.palette.graphics.Palette
+import android.content.Context
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import vn.kozu.player.MusicPlayerManager
 import vn.kozu.data.local.FavoritesStore
 import vn.kozu.domain.model.Beatmap
@@ -88,31 +91,30 @@ private enum class KozuTab(
     LIBRARY("Library", Icons.Filled.LibraryMusic),
     SETTINGS("Settings", Icons.Filled.Settings)
 }
-
 private val demoBeatmaps = listOf(
     Beatmap(
         id = 1L,
         title = "夜に駆ける",
         artist = "YOASOBI",
-        mapper = "Demo mapper"
+        beatmapsetId = null
     ),
     Beatmap(
         id = 2L,
         title = "Lemon",
         artist = "Kenshi Yonezu",
-        mapper = "Demo mapper"
+        beatmapsetId = null
     ),
     Beatmap(
         id = 3L,
         title = "Megalovania",
         artist = "Toby Fox",
-        mapper = "Demo mapper"
+        beatmapsetId = null
     ),
     Beatmap(
         id = 4L,
         title = "Bad Apple!!",
         artist = "Masayoshi Minoshima",
-        mapper = "Demo mapper"
+        beatmapsetId = null
     )
 )
 
@@ -162,6 +164,44 @@ private fun makeKozuColorScheme(
         )
     }
 }
+
+private suspend fun extractCoverColor(
+    context: Context,
+    imageUrl: String?
+): Color? = withContext(Dispatchers.IO) {
+    if (imageUrl.isNullOrBlank()) {
+        return@withContext null
+    }
+
+    try {
+        val connection = java.net.URL(imageUrl)
+            .openConnection() as java.net.HttpURLConnection
+
+        connection.connectTimeout = 8000
+        connection.readTimeout = 8000
+        connection.doInput = true
+
+        try {
+            connection.connect()
+
+            val bitmap = connection.inputStream.use { stream ->
+                android.graphics.BitmapFactory.decodeStream(stream)
+            } ?: return@withContext null
+
+            val palette = Palette.from(bitmap).generate()
+
+            val rgb = palette.vibrantSwatch?.rgb
+                ?: palette.dominantSwatch?.rgb
+                ?: palette.mutedSwatch?.rgb
+
+            rgb?.let { Color(it) }
+        } finally {
+            connection.disconnect()
+        }
+    } catch (e: Exception) {
+        null
+    }
+}
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun KozuApp() {
@@ -190,11 +230,25 @@ private fun KozuApp() {
         getWallpaperSeed(context)
     }
 
+    var albumSeed by remember {
+        mutableStateOf<Color?>(null)
+    }
+
+    LaunchedEffect(selectedBeatmap?.coverUrl) {
+        albumSeed = extractCoverColor(
+            context = context,
+            imageUrl = selectedBeatmap?.coverUrl
+        )
+    }
     val isDarkTheme = selectedTab == KozuTab.SEARCH || selectedTab == KozuTab.SETTINGS
 
-    val kozuColors = remember(wallpaperSeed, isDarkTheme) {
+    val kozuColors = remember(
+        wallpaperSeed,
+        albumSeed,
+        isDarkTheme
+    ) {
         makeKozuColorScheme(
-            seed = wallpaperSeed,
+            seed = albumSeed ?: wallpaperSeed,
             dark = isDarkTheme
         )
     }
